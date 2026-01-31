@@ -1,6 +1,7 @@
 import os
 import sys
 import mlflow
+import dagshub
 from networksecurity.exception.exception import NetworkSecurityException
 from networksecurity.logging.logger import logging
 from networksecurity.entity.artifact import DataTransformationArtifact,ModelTrainerArtifact
@@ -25,8 +26,17 @@ class ModelTrainer():
         try:
             self.model_trainer_config=model_trainer_config
             self.data_transformation_artifact=data_transformation_artifact
+            self._init_tracking()
         except Exception as e:
             raise NetworkSecurityException(e,sys)
+    
+    def _init_tracking(self):
+        """Initialize DagsHub / MLflow safely (NO crash on failure)."""
+        try:
+            dagshub.init(repo_owner='prathamgarg89', repo_name='networksecurity', mlflow=True)
+        except Exception as e:
+            raise NetworkSecurityException(e,sys)
+
         
     def track_mlflow(self,best_model,classification_metric):
         with mlflow.start_run():
@@ -58,7 +68,7 @@ class ModelTrainer():
                 # 'criterion':['gini', 'entropy', 'log_loss'],
                 
                 # 'max_features':['sqrt','log2',None],
-                'n_estimators': [8,16,32,128,256]
+                'n_estimators': [8,16,32,256]
             },
             "Gradient Boosting":{
                 # 'loss':['log_loss', 'exponential'],
@@ -66,11 +76,11 @@ class ModelTrainer():
                 'subsample':[0.6,0.7,0.75,0.85,0.9],
                 # 'criterion':['squared_error', 'friedman_mse'],
                 # 'max_features':['auto','sqrt','log2'],
-                'n_estimators': [8,16,32,64,128,256]
+                'n_estimators': [8,16,32,128,256]
             },
             "Logistic Regression":{},
             "Adaboost":{
-                'learning_rate':[.1,.01,.001],
+                'learning_rate':[.1,.01],
                 'n_estimators': [8,16,32,64,128,256]
             }
             
@@ -101,8 +111,11 @@ class ModelTrainer():
         model_dir_path=os.path.dirname(self.model_trainer_config.trained_model_file_path)
         os.makedirs(model_dir_path,exist_ok=True)
 
-        Network_Model=NetworkModel(preprocessor=preprocessor,model=best_model)
-        save_object(self.model_trainer_config.trained_model_file_path,obj=NetworkModel)
+        network_model=NetworkModel(preprocessor=preprocessor,model=best_model)
+        save_object(self.model_trainer_config.trained_model_file_path,obj=network_model)
+
+        # Push model to final model folder
+        save_object("final_model/model.pkl",best_model)
 
         ## Model Trainer Artifact
 
